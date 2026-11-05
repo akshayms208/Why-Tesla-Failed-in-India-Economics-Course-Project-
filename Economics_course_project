@@ -1,0 +1,111 @@
+import textwrap
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+pd.set_option("display.width", 200)
+pd.set_option("display.max_columns", None)
+
+# smaller text so the plots are less crowded
+plt.rcParams.update({
+    "font.size": 9,
+    "axes.titlesize": 10,
+    "axes.labelsize": 9,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+})
+
+# Load data
+df_main = pd.read_csv("tesla_india_monthly_data.csv")
+df_scenarios = pd.read_csv("tesla_policy_scenarios_simulation.csv")
+df_curve = pd.read_csv("tesla_continuous_tariff_curve.csv")
+df_comp = pd.read_csv("india_ev_competitors_sep2026.csv")
+
+# log columns (only created if the CSV does not have them)
+for new_col, col in [("ln_Y", "Y_Tesla_Sales"), ("ln_X3", "X3_Price_Ratio"),
+                     ("ln_C1", "C1_Dom_EV_Sales_Thousands"),
+                     ("ln_C2", "C2_Charging_Stations_Thousands")]:
+    if new_col not in df_main.columns:
+        df_main[new_col] = np.log(df_main[col])
+
+# Show data and descriptive statistics
+print(df_main)
+print(df_main[["Y_Tesla_Sales", "X1_Tesla_Price_Lakh", "X2_Tariff_Markup_Pct",
+               "X3_Price_Ratio", "C1_Dom_EV_Sales_Thousands",
+               "C2_Charging_Stations_Thousands"]].describe().round(2))
+print(df_comp)
+
+# OLS models
+X_linear = sm.add_constant(df_main[["X1_Tesla_Price_Lakh", "C1_Dom_EV_Sales_Thousands",
+                                    "C2_Charging_Stations_Thousands"]])
+ols_linear = sm.OLS(df_main["Y_Tesla_Sales"], X_linear).fit()
+print("=== MODEL 1: LINEAR OLS SUMMARY ===")
+print(ols_linear.summary())
+
+X_log = sm.add_constant(df_main[["ln_X3", "ln_C1", "ln_C2"]])
+ols_log = sm.OLS(df_main["ln_Y"], X_log).fit()
+print("\n=== MODEL 2: LOG-LOG ELASTICITY OLS SUMMARY ===")
+print(ols_log.summary())
+
+# Plots
+fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
+
+# (a) Actual vs OLS predicted
+ax1 = axes[0, 0]
+ax1.plot(df_main["Month"], df_main["Y_Tesla_Sales"], marker="o", markersize=4,
+         linewidth=1.5, label="Actual Vahan Sales (Y)")
+ax1.plot(df_main["Month"], ols_linear.fittedvalues, linestyle="--", marker="s",
+         markersize=4, linewidth=1.5, color="red", label="OLS Predicted Sales")
+ax1.axvline(x=8.5, color="black", linestyle=":", label="June 2026 Price Cut (-Rs 9L)")
+ax1.set_title("(a) Actual Tesla Registrations vs. OLS Model Fit")
+ax1.set_ylabel("Monthly Units")
+ax1.tick_params(axis="x", rotation=45)
+ax1.legend(loc="upper left")
+ax1.grid(alpha=0.3)
+
+# (b) Tariff simulation
+ax2 = axes[0, 1]
+ax2.plot(df_curve["Import_Duty_X2_Pct"], df_curve["Simulated_Annual_Sales_Y"],
+         color="green", linewidth=2, label="Simulated Demand")
+ax2.axvline(x=70, color="red", linestyle="--", label="Current CBU Tariff (70%)")
+ax2.axvline(x=15, color="orange", linestyle="--", label="SPMEPCI Policy Tariff (15%)")
+ax2.axhline(y=1000, color="gray", linestyle=":", label="1,000 Units/Year Threshold")
+ax2.set_title("(b) Simulated Annual Demand vs. Import Tariff (X2)")
+ax2.set_xlabel("Import Customs Duty X2 (%)")
+ax2.set_ylabel("Simulated Annual Sales (Units)")
+ax2.legend()
+ax2.grid(alpha=0.3)
+
+# (c) Policy scenarios with 95% CI
+ax3 = axes[1, 0]
+yerr_low = df_scenarios["Simulated_Annual_Sales"] - df_scenarios["CI_Lower_2_5"]
+yerr_high = df_scenarios["CI_Upper_97_5"] - df_scenarios["Simulated_Annual_Sales"]
+labels = [textwrap.fill(str(s), 16) for s in df_scenarios["Scenario"]]
+ax3.bar(labels, df_scenarios["Simulated_Annual_Sales"], yerr=[yerr_low, yerr_high],
+        capsize=4, color=["#d62728", "#ff7f0e", "#1f77b4", "#2ca02c"], alpha=0.85)
+ax3.set_title("(c) Simulated Annual Sales Under Policy Scenarios")
+ax3.set_ylabel("Annual Units")
+ax3.grid(axis="y", alpha=0.3)
+
+# (d) All variables indexed (Sep 2025 = 100)
+ax4 = axes[1, 1]
+for col, label in [
+    ("Y_Tesla_Sales", "Y: Tesla Sales"),
+    ("X1_Tesla_Price_Lakh", "X1: Tesla Price"),
+    ("X3_Price_Ratio", "X3: Price Ratio"),
+    ("C1_Dom_EV_Sales_Thousands", "C1: India EV Sales"),
+    ("C2_Charging_Stations_Thousands", "C2: Public Chargers"),
+]:
+    indexed = (df_main[col] / df_main[col].iloc[0]) * 100
+    ax4.plot(df_main["Month"], indexed, marker="o", markersize=3, linewidth=1.5, label=label)
+
+ax4.set_title("(d) All Model Variables Indexed (Sep 2025 = 100)")
+ax4.set_ylabel("Index Value")
+ax4.tick_params(axis="x", rotation=45)
+ax4.legend(loc="upper left")
+ax4.grid(alpha=0.3)
+
+plt.savefig("jupyter_ols_and_simulation_plots.png", dpi=300)
+plt.show()

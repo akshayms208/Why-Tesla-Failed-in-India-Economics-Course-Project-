@@ -1,0 +1,5 @@
+Scenario,Customs_Duty_Pct,Landed_Price_Lakh,Price_Ratio_X3,Simulated_Annual_Sales,CI_Lower_2_5,CI_Upper_97_5,Estimated_Market_Share_Pct
+S1: 70% CBU (Rs 59.89L),70.0,59.89,3.74,782,697,873,0.22
+S2: Price Cut (Rs 50.89L),70.0,50.89,3.18,1464,1464,1464,0.41
+S3: 15% Tariff (Rs 37.80L),15.0,37.8,2.36,4652,3783,5656,1.29
+S4: Local CKD (Rs 29.50L),7.5,29.5,1.84,12287,8278,17547,3.41
